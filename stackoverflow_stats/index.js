@@ -19,26 +19,40 @@ if(!argv.r && !argv.f) {
   console.log("Either -r or -f must be provided")
 }
 
-if(argv.f) {
+// Variables used in collecting tags
+var time = new Date().toString();
+var byTags = {};
+var bySplitFunction = f('%s\n', time);
+
+// Gather all the tags
+var gatherTags = function(page) {
+  console.log(f("- fetching page %s", page));
   var request = require('request');
-  return request('https://api.stackexchange.com/2.2/tags/mongodb/related?site=stackoverflow', {gzip:true}, function (error, response, body) {
+  return request(f('https://api.stackexchange.com/2.2/tags/mongodb/related?site=stackoverflow&page=%s', page), {gzip:true}, function (error, response, body) {
     if (!error && response.statusCode == 200) {
-      var time = new Date().toString();
       var object = JSON.parse(body);
 
-      var byTags = {};
-      var bySplitFunction = f('%s\n', time);
+      // Number of items
       var items = object.items.forEach(function(x) {
         byTags[x.name] = x.count;
         bySplitFunction = bySplitFunction + f('=SPLIT("%s,%s", ",")\n', x.name, x.count);
       });
 
-      // Get the json
-      var json = JSON.stringify(byTags, null, 2);
-      fs.writeFileSync(f('%s/%s.json', argv.o, time), json);
-      fs.writeFileSync(f('%s/%s.txt', argv.o, time), bySplitFunction);
+      if(object.has_more) {
+        gatherTags(page+1);
+      } else {
+        // Get the json
+        var json = JSON.stringify(byTags, null, 2);
+        fs.writeFileSync(f('%s/%s.json', argv.o, time), json);
+        fs.writeFileSync(f('%s/%s.txt', argv.o, time), bySplitFunction);
+      }
     }
   });
+}
+
+
+if(argv.f) {
+  return gatherTags(1);
 }
 
 if(argv.r) {
@@ -50,7 +64,15 @@ if(argv.r) {
   entries = entries.sort()
   // Read and parse all the json
   var data = entries.map(function(x) {
-    return { name: x, data: JSON.parse(fs.readFileSync(f('%s/%s', argv.i, x))) };
+    return { 
+      name: x, 
+      data: JSON.parse(fs.readFileSync(f('%s/%s', argv.i, x))),
+      date: new Date(x.split('.').shift())
+    };
+  })
+
+  data = data.sort(function(a, b) {
+    return a.date - b.date;
   })
 
   // Initial base line
@@ -78,10 +100,6 @@ if(argv.r) {
     // Set the new baseline
     baseLine = data[i];
   }
-
-    console.dir(data)
-
-  // console.dir(entries)
 }
 
 
