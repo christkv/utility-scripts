@@ -1,4 +1,5 @@
 var request = require('request'),
+  tagMap = require('./tag_map'),
   fs = require('fs'),
   f = require('util').format;
 var argv = require('yargs')
@@ -50,6 +51,20 @@ var gatherTags = function(page) {
   });
 }
 
+var mapData = function(map, object) {
+  var finalObject = {};
+  for(var name in map) finalObject[name] = 0;
+
+  for(var name in object) {
+    for(var n in map) {
+      if(map[n].indexOf(name) != -1) {
+        finalObject[n] += object[name];
+      }
+    }
+  }
+
+  return finalObject;
+}
 
 if(argv.f) {
   return gatherTags(1);
@@ -58,6 +73,7 @@ if(argv.f) {
 if(argv.r) {
   var entries = fs.readdirSync(argv.i);
   entries = entries.filter(function(x) {
+    if(x.indexOf('delta.json') != -1) return false;
     return x.indexOf('.json') != -1;
   });
 
@@ -66,14 +82,14 @@ if(argv.r) {
   var data = entries.map(function(x) {
     return { 
       name: x, 
-      data: JSON.parse(fs.readFileSync(f('%s/%s', argv.i, x))),
+      data: mapData(tagMap, JSON.parse(fs.readFileSync(f('%s/%s', argv.i, x)))),
       date: new Date(x.split('.').shift())
     };
   })
 
   data = data.sort(function(a, b) {
     return a.date - b.date;
-  })
+  });
 
   // Initial base line
   var baseLine = data[0];
