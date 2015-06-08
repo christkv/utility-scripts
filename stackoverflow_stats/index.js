@@ -5,19 +5,22 @@ var request = require('request'),
 var argv = require('yargs')
   .usage('Usage: $0 -f -o [string] -i [string]')
   .describe('f', 'Fetch new data from url')
-  .describe('r', 'Generate report')
+  .describe('r', 'Generate delta report')
+  .describe('t', 'Generate last total report')
   .describe('i', 'Input directory to generate summation from')
   .default('i', './data')
   .describe('o', 'Output directory')
   .default('o', './data')
   .argv;
 
-if(argv.r && argv.f) {
-  console.log("Both parameters -r and -f cannot be provided");
+if(argv.r && argv.f && argv.t) {
+  console.log("Parameters -r, -f or -t cannot be provided at the same time");
+  return;
 }
 
-if(!argv.r && !argv.f) {
-  console.log("Either -r or -f must be provided")
+if(!argv.r && !argv.f && !argv.t) {
+  console.log("Either -r, -f or -t must be provided")
+  return;
 }
 
 // Variables used in collecting tags
@@ -51,6 +54,7 @@ var gatherTags = function(page) {
   });
 }
 
+// Map data object
 var mapData = function(map, object) {
   var finalObject = {};
   for(var name in map) finalObject[name] = 0;
@@ -70,14 +74,13 @@ if(argv.f) {
   return gatherTags(1);
 }
 
-if(argv.r) {
+if(argv.r || argv.t) {
   var entries = fs.readdirSync(argv.i);
   entries = entries.filter(function(x) {
     if(x.indexOf('delta.json') != -1) return false;
     return x.indexOf('.json') != -1;
   });
 
-  entries = entries.sort()
   // Read and parse all the json
   var data = entries.map(function(x) {
     return { 
@@ -87,9 +90,18 @@ if(argv.r) {
     };
   })
 
+  // Sort data by date
   data = data.sort(function(a, b) {
     return a.date - b.date;
   });
+
+  // If we only want the last document totals, quick hack
+  if(argv.t) {
+    data = data.reverse();
+    var object = {date:data[0].date, data: {}};
+    for(var name in data[0].data) object.data[name] = 0;
+    data = [object, data[0]];
+  }
 
   // Initial base line
   var baseLine = data[0];
@@ -109,10 +121,12 @@ if(argv.r) {
       bySplitFunction = bySplitFunction + f('=SPLIT("%s,%s", ",")\n', keys[j], delta[keys[j]]);
     }
 
+    // Total or delta
+    var fileType = argv.t ? 'total' : 'delta';
     // Write the delta out
-    fs.writeFileSync(f('%s/%s.delta.json', argv.o, time), JSON.stringify(delta, null, 2))
+    fs.writeFileSync(f('%s/%s.%s.json', argv.o, time, fileType), JSON.stringify(delta, null, 2))
     // Write for simple import
-    fs.writeFileSync(f('%s/%s.delta.txt', argv.o, time), bySplitFunction)
+    fs.writeFileSync(f('%s/%s.%s.txt', argv.o, time, fileType), bySplitFunction)
     // Set the new baseline
     baseLine = data[i];
   }
